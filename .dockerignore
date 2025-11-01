@@ -1,0 +1,10 @@
+.git
+.gitignore
+**/target
+**/.idea
+**/.project
+**/.classpath
+**/.settings
+**/.vscode
+data/approved-ledger.jsonl
+target

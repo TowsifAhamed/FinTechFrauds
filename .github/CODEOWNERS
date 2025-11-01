@@ -1,0 +1,11 @@
+# Default owners for the FinTechFrauds project
+* @fintechfrauds/platform-team
+
+# Module maintainers
+/core/ @fintechfrauds/core-team
+/features/ @fintechfrauds/features-team
+/models/ @fintechfrauds/ml-team
+/rules/ @fintechfrauds/rules-team
+/ledger/ @fintechfrauds/ledger-team
+/serve/ @fintechfrauds/serve-team
+/storage/ @fintechfrauds/storage-team
