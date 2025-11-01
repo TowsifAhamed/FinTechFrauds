@@ -1,0 +1,37 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: FinTechFrauds-Serve
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+
+fintechfrauds:
+  rateLimits:
+    capacity: 60
+    refillTokens: 60
+    refillPeriodSeconds: 60
+  security:
+    requestTimeSkewSeconds: 300
+    api-keys:
+      demo_key: "demo_shared_secret_please_rotate"
+  model:
+    type: dummy
+    resourcePath: "models/model.xgb"
+  ledger:
+    approvedFile: "data/approved-ledger.jsonl"
+    pendingTopic: "ledger.pending"
+
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  timeoutMillis: 2000
