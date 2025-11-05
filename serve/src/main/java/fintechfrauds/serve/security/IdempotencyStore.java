@@ -1,26 +1,51 @@
 package fintechfrauds.serve.security;
 
-import org.springframework.stereotype.Service;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.params.SetParams;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import redis.clients.jedis.JedisPooled;
+import redis.clients.jedis.exceptions.JedisException;
 
-@Service
+@Component
 public class IdempotencyStore {
-  private final JedisPool jedisPool;
 
-  public IdempotencyStore(JedisPool jedisPool) {
-    this.jedisPool = jedisPool;
+  private static final Logger log = LoggerFactory.getLogger(IdempotencyStore.class);
+  private final JedisPooled jedis;
+  private final Map<String, Instant> inMemoryCache = new ConcurrentHashMap<>();
+
+  public IdempotencyStore(JedisPooled jedis) {
+    this.jedis = jedis;
   }
 
-  /**
-   * @return {@code true} if the key was stored for the first time, {@code false} if it already exists.
-   */
-  public boolean putIfAbsent(String key, long ttlSeconds) {
-    try (Jedis jedis = jedisPool.getResource()) {
-      SetParams params = SetParams.setParams().nx().ex((int) ttlSeconds);
-      String result = jedis.set(key, "1", params);
-      return "OK".equalsIgnoreCase(result);
+  public boolean register(String key, Duration ttl) {
+    cleanupExpired();
+    try {
+      Long result = jedis.setnx(key, "1");
+      if (result != null && result == 1L) {
+        jedis.pexpire(key, ttl.toMillis());
+        return true;
+      }
+      return false;
+    } catch (JedisException e) {
+      log.debug("idempotency_store_fallback", e);
+      Instant expiresAt = Instant.now().plus(ttl);
+      return inMemoryCache.putIfAbsent(key, expiresAt) == null;
+    }
+  }
+
+  private void cleanupExpired() {
+    Instant now = Instant.now();
+    Iterator<Map.Entry<String, Instant>> iterator = inMemoryCache.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<String, Instant> entry = iterator.next();
+      if (entry.getValue().isBefore(now)) {
+        iterator.remove();
+      }
     }
   }
 }

@@ -12,7 +12,7 @@ services:
       - redis
     environment:
       REDIS_HOST: redis
-      FINTECHFRAUDS_SECURITY_APIKEYS_DEMO_KEY: demo_shared_secret_please_rotate
+      FINTECHFRAUDS_SECURITY_API_KEYS_DEMO_KEY: demo_shared_secret_please_rotate
       FINTECHFRAUDS_MODEL_TYPE: dummy
       SPRINGDOC_API_DOCS_ENABLED: "true"
       SPRINGDOC_SWAGGER_UI_ENABLED: "true"

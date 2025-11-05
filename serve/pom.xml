@@ -32,7 +32,12 @@
       <version>1.17.1</version>
     </dependency>
     <dependency>
-      <groupId>com.github.vladimir-bukhtoyarov</groupId>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>3.14.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.bucket4j</groupId>
       <artifactId>bucket4j-core</artifactId>
       <version>8.0.1</version>
     </dependency>
@@ -47,16 +52,43 @@
       <version>2.6.0</version>
     </dependency>
     <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>1.0.83</version>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>../ledger</directory>
+        <includes>
+          <include>approved-ledger.schema.json</include>
+        </includes>
+        <targetPath>ledger</targetPath>
+      </resource>
+    </resources>
+    <testResources>
+      <testResource>
+        <directory>src/test/resources</directory>
+      </testResource>
+      <testResource>
+        <directory>testdata</directory>
+        <targetPath>testdata</targetPath>
+      </testResource>
+    </testResources>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>3.3.3</version>
       </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>

@@ -1,0 +1,14 @@
+spring:
+  profiles: prod
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+fintechfrauds:
+  rateLimits:
+    capacity: 30
+    refillTokens: 30
+    refillPeriodSeconds: 60

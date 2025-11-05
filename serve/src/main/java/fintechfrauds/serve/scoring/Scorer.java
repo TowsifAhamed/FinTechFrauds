@@ -1,5 +1,7 @@
 package fintechfrauds.serve.scoring;
 
+import fintechfrauds.serve.api.dto.ScoreRequest;
+
 public interface Scorer {
-  double score(FeatureVector vector);
+  double score(ScoreRequest request, FeatureVector features);
 }

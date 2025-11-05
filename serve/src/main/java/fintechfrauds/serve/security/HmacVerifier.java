@@ -1,66 +1,46 @@
 package fintechfrauds.serve.security;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
-import java.util.Objects;
 import java.time.format.DateTimeParseException;
+import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.springframework.stereotype.Component;
 
-public final class HmacVerifier {
-  private HmacVerifier() {}
+@Component
+public class HmacVerifier {
 
-  public static boolean verify(
-      String providedBase64,
-      String secret,
-      String timestampIso,
-      String nonce,
-      byte[] body,
-      long allowedSkewSeconds) {
-    if (secret == null) {
-      return false;
-    }
-    String bodyHash = sha256Hex(body);
-    String canonical = timestampIso + "\n" + nonce + "\n" + bodyHash;
-    String expected = hmacBase64(secret, canonical);
-    if (!Objects.equals(expected, providedBase64)) {
-      return false;
-    }
-    try {
-      Instant timestamp = Instant.parse(timestampIso);
-      Instant now = Instant.now();
-      long delta = Math.abs(Duration.between(timestamp, now).getSeconds());
-      return delta <= allowedSkewSeconds;
-    } catch (DateTimeParseException ex) {
-      return false;
-    }
+  public String canonicalRequest(String timestamp, String nonce, String bodySha256Hex) {
+    return timestamp + "\n" + nonce + "\n" + bodySha256Hex;
   }
 
-  private static String hmacBase64(String secret, String canonical) {
+  public String sha256Hex(String body) {
+    return DigestUtils.sha256Hex(body == null ? "" : body);
+  }
+
+  public String sign(String secret, String canonical) {
     try {
       Mac mac = Mac.getInstance("HmacSHA256");
       mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-      byte[] result = mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8));
-      return Base64.getEncoder().encodeToString(result);
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to compute signature", e);
+      byte[] raw = mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8));
+      return Base64.getEncoder().encodeToString(raw);
+    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+      throw new IllegalStateException("Unable to compute HMAC", e);
     }
   }
 
-  private static String sha256Hex(byte[] body) {
+  public boolean verifyTimestamp(String timestamp, long allowedSkewSeconds) {
     try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] hash = digest.digest(body);
-      StringBuilder builder = new StringBuilder(hash.length * 2);
-      for (byte b : hash) {
-        builder.append(String.format("%02x", b));
-      }
-      return builder.toString();
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to hash request body", e);
+      Instant instant = Instant.parse(timestamp);
+      Instant now = Instant.now();
+      return Math.abs(Duration.between(now, instant).getSeconds()) <= allowedSkewSeconds;
+    } catch (DateTimeParseException ex) {
+      return false;
     }
   }
 }

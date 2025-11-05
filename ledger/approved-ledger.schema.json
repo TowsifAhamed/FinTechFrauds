@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Approved Fraud Ledger Entry",
+  "type": "object",
+  "required": [
+    "id",
+    "reporter",
+    "accountHash",
+    "descriptionTokensHash",
+    "description",
+    "amountCents",
+    "status",
+    "moderatedAt",
+    "moderator",
+    "version",
+    "hash"
+  ],
+  "properties": {
+    "id": {"type": "string"},
+    "reporter": {"type": "string"},
+    "accountHash": {"type": "string"},
+    "merchantHash": {"type": ["string", "null"]},
+    "descriptionTokensHash": {"type": "string"},
+    "description": {"type": "string"},
+    "amountCents": {"type": "integer", "minimum": 0},
+    "countryCode": {"type": ["string", "null"], "maxLength": 3},
+    "reportedAt": {"type": ["integer", "null"]},
+    "status": {"type": "string", "enum": ["APPROVED"]},
+    "moderatedAt": {"type": "string", "format": "date-time"},
+    "moderator": {"type": "string"},
+    "version": {"type": "integer", "minimum": 1},
+    "prevHash": {"type": ["string", "null"]},
+    "hash": {"type": "string"}
+  },
+  "additionalProperties": false
+}

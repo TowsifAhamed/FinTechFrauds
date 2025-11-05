@@ -1,25 +1,26 @@
 package fintechfrauds.serve.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.DefaultJedisClientConfig;
+import redis.clients.jedis.HostAndPort;
+import redis.clients.jedis.JedisClientConfig;
+import redis.clients.jedis.JedisPooled;
 
 @Configuration
 public class RedisConfig {
 
-  @Bean
-  public JedisPool jedisPool(Environment environment) {
-    String host = environment.getProperty("redis.host", "127.0.0.1");
-    int port = Integer.parseInt(environment.getProperty("redis.port", "6379"));
-    int timeout = Integer.parseInt(environment.getProperty("redis.timeoutMillis", "2000"));
-
-    JedisPoolConfig config = new JedisPoolConfig();
-    config.setMaxTotal(64);
-    config.setMaxIdle(32);
-    config.setMinIdle(2);
-
-    return new JedisPool(config, host, port, timeout);
+  @Bean(destroyMethod = "close")
+  public JedisPooled jedisPooled(
+      @Value("${redis.host:localhost}") String host,
+      @Value("${redis.port:6379}") int port,
+      @Value("${redis.timeoutMillis:2000}") int timeoutMillis) {
+    JedisClientConfig config =
+        DefaultJedisClientConfig.builder()
+            .connectionTimeoutMillis(timeoutMillis)
+            .socketTimeoutMillis(timeoutMillis)
+            .build();
+    return new JedisPooled(new HostAndPort(host, port), config);
   }
 }
