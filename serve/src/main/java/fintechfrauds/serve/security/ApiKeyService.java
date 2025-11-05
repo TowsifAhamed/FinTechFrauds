@@ -1,109 +1,46 @@
 package fintechfrauds.serve.security;
 
-import java.util.LinkedHashMap;
+import fintechfrauds.serve.config.FintechFraudsProperties;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
-import org.springframework.core.env.Environment;
+import java.util.Optional;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.EnumerablePropertySource;
-import org.springframework.core.env.PropertySource;
 
 @Service
 public class ApiKeyService {
-  private final Map<String, String> apiSecrets;
 
-  @Autowired
-  public ApiKeyService(Environment environment) {
-    this(loadSecrets(environment));
-  }
+  private final Map<String, String> apiKeys;
 
-  ApiKeyService(Map<String, String> secrets) {
-    this.apiSecrets = normalize(secrets);
-  }
-
-  public boolean exists(String apiKey) {
-    return apiSecrets.containsKey(apiKey);
-  }
-
-  public String secretFor(String apiKey) {
-    return apiSecrets.get(apiKey);
-  }
-
-  private static Map<String, String> loadSecrets(Environment environment) {
-    var binder = Binder.get(environment);
-    Map<String, String> secrets = new LinkedHashMap<>();
-
-    binder
-        .bind("fintechfrauds.security.api-keys", Bindable.mapOf(String.class, String.class))
-        .ifBound(secrets::putAll);
-    binder
-        .bind("fintechfrauds.security.apikeys", Bindable.mapOf(String.class, String.class))
-        .ifBound(secrets::putAll);
-    collectEnvironmentStyleSecrets(environment, secrets);
-    return secrets;
-  }
-
-  private static void collectEnvironmentStyleSecrets(Environment environment, Map<String, String> sink) {
-    if (!(environment instanceof ConfigurableEnvironment configurable)) {
-      return;
+  public ApiKeyService(FintechFraudsProperties properties) {
+    Map<String, String> configured = properties.getSecurity().getApiKeys();
+    Map<String, String> normalized = new HashMap<>();
+    if (configured != null) {
+      configured.forEach(
+          (key, secret) -> {
+            if (StringUtils.isNotBlank(key) && StringUtils.isNotBlank(secret)) {
+              normalized.put(normalize(key), secret);
+            }
+          });
     }
-    for (PropertySource<?> source : configurable.getPropertySources()) {
-      if (!(source instanceof EnumerablePropertySource<?> enumerable)) {
-        continue;
-      }
-      for (String name : enumerable.getPropertyNames()) {
-        if (name == null) {
-          continue;
-        }
-        String upper = name.toUpperCase(Locale.ROOT);
-        String keyPortion = null;
-        if (upper.startsWith("FINTECHFRAUDS_SECURITY_APIKEYS_")) {
-          keyPortion = name.substring("FINTECHFRAUDS_SECURITY_APIKEYS_".length());
-        } else if (upper.startsWith("FINTECHFRAUDS_SECURITY_API_KEYS_")) {
-          keyPortion = name.substring("FINTECHFRAUDS_SECURITY_API_KEYS_".length());
-        }
-        if (keyPortion == null || keyPortion.isBlank()) {
-          continue;
-        }
-        Object value = enumerable.getProperty(name);
-        if (value != null) {
-          sink.put(keyPortion.toLowerCase(Locale.ROOT), value.toString());
-        }
-      }
+    this.apiKeys = Map.copyOf(normalized);
+  }
+
+  public Optional<String> findSecret(String apiKey) {
+    if (StringUtils.isBlank(apiKey)) {
+      return Optional.empty();
     }
+    String trimmed = apiKey.trim();
+    String normalizedKey = normalize(trimmed);
+    String secret = apiKeys.get(normalizedKey);
+    return Optional.ofNullable(secret);
   }
 
-  private static Map<String, String> normalize(Map<String, String> secrets) {
-    Map<String, String> normalized = new LinkedHashMap<>();
-    secrets.forEach(
-        (key, value) -> {
-          if (key == null || key.isBlank()) {
-            return;
-          }
-          if (value == null || value.isBlank()) {
-            throw new IllegalStateException(
-                "Secret for API key '" + key + "' must not be blank");
-          }
-          putAlias(normalized, key, value);
-          putAlias(normalized, key.replace('-', '_'), value);
-          putAlias(normalized, key.replace('_', '-'), value);
-        });
-    return Map.copyOf(normalized);
-  }
-
-  private static void putAlias(Map<String, String> normalized, String alias, String value) {
-    normalized.compute(
-        alias,
-        (k, existing) -> {
-          if (existing != null && !existing.equals(value)) {
-            throw new IllegalStateException(
-                "Conflicting secrets configured for API key alias '" + alias + "'");
-          }
-          return value;
-        });
+  private String normalize(String key) {
+    return key
+        .trim()
+        .toLowerCase(Locale.ROOT)
+        .replace('-', '_');
   }
 }

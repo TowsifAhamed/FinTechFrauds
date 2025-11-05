@@ -2,55 +2,38 @@ package fintechfrauds.serve.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
+@SpringBootTest
 class HmacVerifierTest {
 
+  @Autowired private HmacVerifier hmacVerifier;
+
   @Test
-  void verifyAcceptsValidSignature() {
-    String body = "{\"x\":1}";
+  void computesSignatureConsistently() {
+    String body = "{\"foo\":\"bar\"}";
     String timestamp = Instant.now().toString();
     String nonce = "abc123";
-    String secret = "demo_shared_secret_please_rotate";
+    String bodyHash = hmacVerifier.sha256Hex(body);
+    String canonical = hmacVerifier.canonicalRequest(timestamp, nonce, bodyHash);
+    String signature = hmacVerifier.sign("shared-secret", canonical);
 
-    String canonical =
-        timestamp + "\n" + nonce + "\n" + sha256Hex(body.getBytes(StandardCharsets.UTF_8));
-    String signature = hmacBase64(secret, canonical);
+    assertThat(signature).isNotBlank();
+    assertThat(hmacVerifier.verifyTimestamp(timestamp, 300)).isTrue();
+    assertThat(hmacVerifier.verifyTimestamp(Instant.now().minusSeconds(5000).toString(), 300))
+        .isFalse();
 
-    boolean result =
-        HmacVerifier.verify(
-            signature, secret, timestamp, nonce, body.getBytes(StandardCharsets.UTF_8), 300);
+    String tamperedCanonical =
+        hmacVerifier.canonicalRequest(timestamp, nonce, hmacVerifier.sha256Hex("tampered"));
+    String tamperedSignature = hmacVerifier.sign("shared-secret", tamperedCanonical);
+    assertThat(tamperedSignature).isNotEqualTo(signature);
 
-    assertThat(result).isTrue();
-}
-
-  private static String sha256Hex(byte[] body) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] hash = digest.digest(body);
-      StringBuilder builder = new StringBuilder(hash.length * 2);
-      for (byte b : hash) {
-        builder.append(String.format("%02x", b));
-      }
-      return builder.toString();
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  private static String hmacBase64(String secret, String canonical) {
-    try {
-      Mac mac = Mac.getInstance("HmacSHA256");
-      mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-      byte[] result = mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8));
-      return java.util.Base64.getEncoder().encodeToString(result);
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
+    String tamperedNonceCanonical =
+        hmacVerifier.canonicalRequest(timestamp, nonce + "-tampered", bodyHash);
+    String tamperedNonceSignature = hmacVerifier.sign("shared-secret", tamperedNonceCanonical);
+    assertThat(tamperedNonceSignature).isNotEqualTo(signature);
   }
 }

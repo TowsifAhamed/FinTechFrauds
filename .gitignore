@@ -1,2 +1,5 @@
 target/
 **/target/
+# model artifacts
+serve/src/main/resources/models/*
+!serve/src/main/resources/models/.keep

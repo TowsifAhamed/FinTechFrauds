@@ -27,11 +27,13 @@ fintechfrauds:
   model:
     type: dummy
     resourcePath: "models/model.xgb"
+    uri: ${MODEL_URI:}
+    sha256: ${MODEL_SHA256:}
   ledger:
     approvedFile: "data/approved-ledger.jsonl"
     pendingTopic: "ledger.pending"
 
 redis:
-  host: "127.0.0.1"
-  port: 6379
-  timeoutMillis: 2000
+  host: "${REDIS_HOST:127.0.0.1}"
+  port: ${REDIS_PORT:6379}
+  timeoutMillis: ${REDIS_TIMEOUT_MILLIS:2000}

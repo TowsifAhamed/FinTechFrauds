@@ -40,15 +40,15 @@ The root `pom.xml` wires all modules together so Maven can build them as a singl
 
 `serve` bootstraps a Spring Boot application that now exposes scoring and ledger moderation endpoints:
 
-- `POST /v1/score` – loads Redis-backed features, applies the bundled `DummyScorer`, runs policy decisions via `RulesEngine`, and returns `{risk, decision, reasons}`.
+- `POST /v1/score` – loads Redis-backed features, applies the bundled `DummyScorer`, runs policy decisions via `RulesEngine`, and returns `{risk, decision, reasons}`. In the default (dev) profile this route is open; in `prod` it is protected by the same HMAC scheme as ledger endpoints.
 - `POST /v1/ledger/report` – accepts signed fraud reports, enforces rate limits and idempotency, and enqueues the payload for human moderation while returning the server-assigned report `id`.
 - `GET /v1/ledger/pending/next` – returns the next queued report (with payload) so analysts can inspect details before acting.
 - `POST /v1/ledger/moderate` – lets a moderator approve or reject the oldest pending report, appending approved entries to `data/approved-ledger.jsonl`.
 - `GET /v1/ledger/pending/count` – lightweight queue depth indicator for operations.
 
-Accepted reports echo the generated `id`, acknowledge the enqueue with `queuedAt`, and every approved ledger line captures both values for downstream reconciliation.
+Accepted reports echo the generated `id`, acknowledge the enqueue with `queuedAt`, and every approved ledger line is appended to `serve/data/approved-ledger.jsonl` with a hash-chain for tamper evidence.
 
-Runtime security sits behind an `ApiAuthFilter` that verifies HMAC signatures (`X-Signature`) over `timestamp + "\n" + nonce + "\n" + sha256(body)` with shared secrets defined in `application.yml`. An in-memory token bucket applies per API key/IP limits, Redis ensures idempotency, and Actuator provides `/actuator/health` for readiness probes. `/v1/score` remains open for local experimentation; gate it with API keys before production use.
+Runtime security sits behind an `ApiAuthFilter` that verifies HMAC signatures (`X-Signature`) over `timestamp + "\n" + nonce + "\n" + sha256(body)` with shared secrets defined in `application.yml`. An in-memory token bucket applies per API key/IP limits, Redis-backed idempotency keys prevent replays, and Actuator provides `/actuator/health` for readiness probes. `/v1/score` remains open for local experimentation but is automatically gated once the `prod` profile is activated.
 
 ### Scoring configuration
 
@@ -87,13 +87,13 @@ Submit a fraud report (requires signing headers):
 
 ```bash
 BODY='{
-  "reportedAt":"2025-10-28T10:21:30Z",
   "reporter":"org_hash_demo",
+  "accountHash":"acct_hash_demo",
   "merchantHash":"m_demo",
-  "descriptionTokensHash":["t_gift","t_card","t_burst"],
-  "mcc":"5999",
-  "pattern":["BURST_GIFTCARDS"],
-  "evidenceUri":"demo://evidence/123"
+  "description":"STORED_VALUE_PROVIDER",
+  "descriptionTokensHash":"t_giftcards",
+  "amountCents": 8800,
+  "reportedAt": 1700000000000
 }'
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 NONCE=$(uuidgen | tr 'A-Z' 'a-z')
@@ -117,7 +117,14 @@ Moderate the next report in the queue:
 ```bash
 curl -sS http://localhost:8080/v1/ledger/moderate \
   -H 'Content-Type: application/json' \
+  -H 'X-Api-Key: demo_key' \
+  -H "X-Timestamp: $TS" \
+  -H "X-Nonce: $NONCE" \
+  -H "X-Idempotency-Key: $(uuidgen | tr 'A-Z' 'a-z')" \
+  -H "X-Signature: $SIG" \
   -d '{"id":"<id-returned-from-report>","action":"APPROVE","moderator":"analyst_demo"}' | jq
+
+# (Recompute $SIG with the moderation request body before invoking the call.)
 ```
 
 Peek at the head of the moderation queue before deciding:
@@ -179,7 +186,7 @@ This launches the ledger API with sample in-memory dependencies. Update the conf
 - The scoring API only accepts hashed identifiers and plaintext transaction metadata required for rules.
 - Fraud reports are signed with HMAC-SHA256 using tenant-specific secrets and enforced timestamp skew (`±5 minutes`) to mitigate replay.
 - Enable TLS/Mutual TLS at the ingress layer and rotate API keys using your KMS of choice before promoting to production.
-- Runtime API keys are normalized so that hyphenated and underscored variants both work. For example, setting `FINTECHFRAUDS_SECURITY_APIKEYS_DEMO_KEY` makes the service accept either `demo-key` or `demo_key` in the `X-Api-Key` header.
+- Runtime API keys are normalized so that hyphenated, underscored, or uppercase variants all resolve to the same secret. For example, setting `FINTECHFRAUDS_SECURITY_APIKEYS_DEMO_KEY` makes the service accept `demo-key`, `demo_key`, or `DEMO-KEY` in the `X-Api-Key` header.
 
 ## Licensing
 

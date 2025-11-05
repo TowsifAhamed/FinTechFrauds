@@ -1,5 +1,7 @@
 package fintechfrauds.serve.scoring;
 
+import fintechfrauds.serve.api.dto.ScoreRequest;
+
 public interface FeatureStore {
-  Features loadFeatures(String accountHash);
+  FeatureVector loadFeatures(ScoreRequest request);
 }

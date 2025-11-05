@@ -1,5 +1,6 @@
 package fintechfrauds.serve.config;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
@@ -16,27 +17,20 @@ public class OpenApiConfig {
     return new OpenAPI()
         .info(
             new Info()
-                .title("FinTechFrauds API")
-                .version("v1")
+                .title("FinTechFrauds APIs")
                 .description(
-                    """
-                        Scoring, rules, and moderated fraud ledger.
-                        Protected endpoints require HMAC headers:
-                        X-Api-Key, X-Timestamp, X-Nonce, X-Idempotency-Key (POST), X-Signature
-                        (base64 HMAC-SHA256 of the canonical request string).
-                        """
-                        .stripIndent())
-                .contact(new Contact().name("FinTechFrauds Team")))
-        .addSecurityItem(new SecurityRequirement().addList("apiKey"))
+                    "APIs are protected with HMAC headers (X-Api-Key, X-Timestamp, X-Nonce, X-Idempotency-Key, X-Signature).")
+                .contact(new Contact().name("Risk Engineering"))
+                .version("1.0.0"))
         .components(
-            new io.swagger.v3.oas.models.Components()
+            new Components()
                 .addSecuritySchemes(
-                    "apiKey",
+                    "hmac",
                     new SecurityScheme()
+                        .name("X-Signature")
+                        .scheme("HMAC-SHA256")
                         .type(SecurityScheme.Type.APIKEY)
-                        .in(SecurityScheme.In.HEADER)
-                        .name("X-Api-Key")
-                        .description(
-                            "Use together with X-Timestamp, X-Nonce, X-Signature, and X-Idempotency-Key (POST).")));
+                        .in(SecurityScheme.In.HEADER)))
+        .addSecurityItem(new SecurityRequirement().addList("hmac"));
   }
 }
