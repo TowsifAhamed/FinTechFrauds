@@ -736,6 +736,185 @@ The repository structure, test coverage, documentation quality, and code impleme
 
 ---
 
+## 14. Central Fraud Ledger Deep Dive
+
+### 14.1 Overview
+
+**See dedicated analysis:** `LEDGER_ANALYSIS.md` (comprehensive 500+ line document)
+
+The repository implements a **moderated, tamper-evident central ledger** for tracking confirmed fraudulent accounts across organizations. This is a critical component for consortium-based fraud detection.
+
+### 14.2 Architecture Summary
+
+**Purpose:** Shared database of confirmed fraud cases with cryptographic tamper evidence
+
+**Storage:** `serve/data/approved-ledger.jsonl` (append-only JSONL file)
+
+**Key Features:**
+- ✅ **Hash-chained entries** - SHA-256 linking prevents tampering
+- ✅ **Human moderation** - Reports reviewed before approval
+- ✅ **HMAC authentication** - Secure report submission
+- ✅ **Deduplication** - Prevents duplicate reports (day-based keys)
+- ✅ **JSON schema validation** - Data quality enforcement
+- ✅ **accountHash tracking** - Records fraudulent account identifiers
+
+### 14.3 Ledger Entry Schema
+
+Each approved entry contains:
+- `accountHash` - **The fraudulent account identifier** (hashed for privacy)
+- `merchantHash` - Associated merchant (if applicable)
+- `reporter` - Organization that submitted the report
+- `description` - Transaction description (e.g., "STORED_VALUE_PROVIDER")
+- `amountCents` - Fraud transaction amount
+- `status` - Always "APPROVED" in ledger
+- `moderator` - Analyst who approved the report
+- `hash` / `prevHash` - Hash chain for tamper evidence
+
+**Example:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "reporter": "risk_ops_alpha",
+  "accountHash": "acct_gamma_masked",
+  "merchantHash": "52221ba04ee4ca97",
+  "description": "STORED_VALUE_PROVIDER",
+  "amountCents": 1560,
+  "status": "APPROVED",
+  "moderatedAt": "2025-11-15T12:30:45Z",
+  "moderator": "analyst_jane",
+  "prevHash": "dGVzdA==",
+  "hash": "bXlhY3R1YWw="
+}
+```
+
+### 14.4 API Endpoints
+
+**Write Operations:**
+1. `POST /v1/ledger/report` - Submit fraud report (HMAC required)
+2. `POST /v1/ledger/moderate` - Approve/reject report
+3. `GET /v1/ledger/pending/next` - Peek next pending report
+4. `GET /v1/ledger/pending/count` - Queue depth
+
+**Read Operations:**
+- ❌ **MISSING** - No query/search endpoints
+- Cannot lookup accounts by `accountHash`
+- Cannot search historical fraud reports
+- Cannot get ledger statistics
+
+### 14.5 Hash Chain Tamper Evidence
+
+**Implementation Verified:** `LedgerService.java` (line 147-205)
+
+**Algorithm:**
+```
+hash = Base64(SHA256(prevHash + canonical_json))
+```
+
+**Test Coverage:** `LedgerFlowTest.java` validates:
+- ✅ Hash calculation correctness
+- ✅ Chain linking (prevHash → hash)
+- ✅ First entry (prevHash = null)
+- ✅ Subsequent entries maintain chain
+
+**Result:** Any modification to any field in any entry breaks the entire chain from that point forward, making tampering detectable.
+
+### 14.6 Deduplication Strategy
+
+**Dedupe Key Format:** `reporter|merchantHash|descriptionTokensHash|day`
+
+**Example:** `risk_ops_alpha|merch_abc123|tokens_xyz789|2025-11-15`
+
+**Prevents:**
+- Same organization submitting same fraud report multiple times per day
+- Accidental duplicate submissions
+- Spam/flooding
+
+**Test Coverage:** `LedgerFlowTest.java` (line 131-179) verifies:
+- ✅ First report accepted
+- ✅ Duplicate report returns 409 Conflict
+- ✅ Dedupe keys loaded on startup
+
+### 14.7 Integration Test Evidence
+
+**From LedgerFlowTest.java:**
+
+**Complete Workflow Test:**
+1. ✅ Submit fraud report with HMAC auth → 202 Accepted
+2. ✅ Check pending count → count = 1
+3. ✅ Peek next report → full payload returned
+4. ✅ Moderate (APPROVE) → 200 OK
+5. ✅ Verify file created at `serve/data/approved-ledger.jsonl`
+6. ✅ Validate JSON schema compliance
+7. ✅ Verify hash chain integrity
+8. ✅ Verify status = "APPROVED"
+
+**Duplicate Detection Test:**
+1. ✅ Submit report → accepted
+2. ✅ Moderate and approve → ledger entry created
+3. ✅ Submit same report again → 409 Conflict
+4. ✅ Verify only 1 entry in ledger file
+
+### 14.8 Critical Gap Identified
+
+**Issue:** The ledger successfully stores fraudulent accounts but **lacks query endpoints**.
+
+**Impact:**
+- ❌ Cannot check if an account is in the fraud ledger during real-time scoring
+- ❌ Cannot build fraud history reports
+- ❌ Cannot integrate ledger into scoring pipeline without custom file parsing
+- ❌ Limited operational utility
+
+**Recommended Additions:**
+```
+GET /v1/ledger/account/{accountHash}
+  → Check if account in ledger, return report count
+
+GET /v1/ledger/entries?page=0&size=100
+  → List all entries (paginated)
+
+GET /v1/ledger/search?accountHash=X&since=Y
+  → Search ledger by criteria
+
+GET /v1/ledger/stats
+  → Aggregate statistics
+```
+
+**Current Workaround:**
+- Read `serve/data/approved-ledger.jsonl` directly
+- Parse JSONL manually
+- Build custom index (e.g., in Redis)
+
+### 14.9 Verification Status
+
+**Central Fraud Ledger: ✅ VERIFIED with Limitations**
+
+**What Works:**
+- ✅ Fraud report submission
+- ✅ Human moderation workflow
+- ✅ Tamper-evident storage (hash chain)
+- ✅ Deduplication
+- ✅ HMAC authentication
+- ✅ JSON schema validation
+- ✅ Comprehensive test coverage
+
+**What's Missing:**
+- ❌ Query/search API
+- ❌ Account lookup endpoint
+- ❌ Statistics/analytics endpoint
+- ❌ Bulk import tool
+- ❌ Ledger verification CLI tool
+
+**Conclusion:** The ledger **works correctly** for storing fraud data with cryptographic integrity. However, the lack of query endpoints significantly limits its practical utility for real-time fraud prevention.
+
+**Full Analysis:** See `LEDGER_ANALYSIS.md` for complete details including:
+- Detailed architecture diagrams
+- Full API specifications
+- Security analysis
+- Scalability recommendations
+- Implementation roadmap for query endpoints
+
+---
+
 ## Appendix: File Inventory
 
 ### Source Files (47 Java classes)
